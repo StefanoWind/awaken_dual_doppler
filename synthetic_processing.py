@@ -44,3 +44,4 @@ def wind_speed(wv=wind_velocity()):
     return ws, ws_av
 #%%
 print(wind_speed())
+print("Hello World")
