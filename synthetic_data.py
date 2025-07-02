@@ -63,6 +63,16 @@ u_los2=np.cos(np.radians(ele2))*np.cos(np.radians(90-azi2))*U+\
        np.cos(np.radians(ele2))*np.sin(np.radians(90-azi2))*V+\
        np.sin(np.radians(ele2))*W
 
+A=np.zeros((2,2))
+A[0,:]=[np.cos(np.radians(ele1))*np.cos(np.radians(90-azi1)),
+        np.cos(np.radians(ele1))*np.sin(np.radians(90-azi1))]
+
+A[1,:]=[np.cos(np.radians(ele2))*np.cos(np.radians(90-azi2)),
+        np.cos(np.radians(ele2))*np.sin(np.radians(90-azi2))]
+
+A_plus=np.linalg.inv(A)
+vel=A_plus@np.array([[u_los1.mean()],[u_los2.mean()]])
+    
 #%% Output
 output1=xr.Dataset()
 output1['wind_speed']=xr.DataArray(data=u_los1,coords={'range':r,'scanID':np.arange(N)})
@@ -70,6 +80,6 @@ output1.to_netcdf(os.path.join(cd,'data/sx.lidar.z01.a0.20250616.000000.nc'))
 
 output2=xr.Dataset()
 output2['wind_speed']=xr.DataArray(data=u_los2,coords={'range':r,'scanID':np.arange(N)})
-output1.to_netcdf(os.path.join(cd,'data/sx.lidar.z02.a0..20250616.000000.nc'))
+output2.to_netcdf(os.path.join(cd,'data/sx.lidar.z02.a0.20250616.000000.nc'))
 
 
