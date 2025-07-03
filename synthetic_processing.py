@@ -9,8 +9,8 @@ elevation1 = 0.55 * (math.pi/180)
 elevation2 = 2.33 * (math.pi/180)
 azimuth1 = 218.03 * (math.pi/180)
 azimuth2 = 266.69 * (math.pi/180)
-range1 = 2985
-range2 = 1815
+range1 = 2925
+range2 = 1875
 scan = 0
 #%% Define wind velocity and wind speed functions
 def wind_velocity(el1=elevation1, el2=elevation2, az1=azimuth1, az2=azimuth2, rg1=range1, rg2=range2, sc=scan):
