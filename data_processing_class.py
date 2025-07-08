@@ -2,6 +2,7 @@ import math
 import numpy as np
 import xarray as xr
 import matplotlib.pyplot as plt
+import scipy as sp
 #%% Defines class for a pair of xarray lidar datasets
 # Assumes datasets have equal number of ranges
 class Lidar_Dataset:
@@ -18,16 +19,19 @@ class Lidar_Dataset:
         self.l1 = self.l1.assign_coords(scanID=self.l1.time)
         self.l1 = self.l1.drop_vars(["time", "beamID"]).squeeze(drop=True).rename({"scanID": "time"})
         # Reorganizes lidar2 dataset so that scanID is replaced with time
-        l2_datafile = xr.open_dataset(lidar2)
-        l2_new = l2_datafile.assign_coords(scanID=l2_datafile.time)
-        self.l2 = l2_new.drop_vars(["time", "beamID"]).squeeze(drop=True).rename({"scanID": "time"})
+        self.l2 = xr.open_dataset(lidar2)
+        self.l2 = self.l2.assign_coords(scanID=self.l2.time)
+        self.l2 = self.l2.drop_vars(["time", "beamID"]).squeeze(drop=True).rename({"scanID": "time"})
         
         # Defines uniform time distribution
         t1 = self.l1.time.min().values
         t2 = self.l1.time.max().values
         self.time = np.arange(t1, t2, np.timedelta64(1, "s"))
-    
-    # Find wind velocities
+        # Interpolates wind speed over uniform time distribution
+        self.ws1_int = self.l1.wind_speed.where(self.l1.qc_wind_speed==0).interp(time=self.time)
+        self.ws2_int = self.l2.wind_speed.where(self.l2.qc_wind_speed==0).interp(time=self.time)
+        
+    # Finds wind velocities
     # Returns 2D vectors
     def wind_velocity(self):
         # Defines transformation matrix
@@ -35,14 +39,10 @@ class Lidar_Dataset:
         row2 = [math.cos(self.el2) * math.sin(self.az2), math.cos(self.el2) * math.cos(self.az2)]
         equ_matrix = np.array([row1, row2])
         
-        # Interpolates data over time distribution
-        rad_vel1 = self.l1.wind_speed.where(self.l1.qc_wind_speed==0).sel(range=self.rg1)
-        rad_vel1_int = rad_vel1.interp(time=self.time)
-        rad_vel2 = self.l2.wind_speed.where(self.l2.qc_wind_speed==0).sel(range=self.rg2)
-        rad_vel2_int = rad_vel2.interp(time=self.time)
-        
         # Defines radial velocity vector
-        rv = np.array([rad_vel1_int, rad_vel2_int])
+        rv1 = self.ws1_int.sel(range=self.rg1)
+        rv2 = self.ws2_int.sel(range=self.rg2)
+        rv = np.array([rv1, rv2])
     
         # Solves for wind velocity
         equ_matrix_inv = np.linalg.inv(equ_matrix)
@@ -50,7 +50,7 @@ class Lidar_Dataset:
         
         return wind_vel
     
-    # Find average wind velocities
+    # Finds average wind velocities
     # Returns 2D vector
     def av_wind_velocity(self):      
         # Defines transformation matrix
@@ -58,14 +58,10 @@ class Lidar_Dataset:
         row2 = [math.cos(self.el2) * math.sin(self.az2), math.cos(self.el2) * math.cos(self.az2)]
         equ_matrix = np.array([row1, row2])
         
-        # Defines average radial velocity vector
-        rad_vel1 = self.l1.wind_speed.where(self.l1.qc_wind_speed==0).sel(range=self.rg1)
-        rad_vel1_int = rad_vel1.interp(time=self.time).mean()
-        rad_vel2 = self.l2.wind_speed.where(self.l2.qc_wind_speed==0).sel(range=self.rg2)
-        rad_vel2_int = rad_vel2.interp(time=self.time).mean()
-        
         # Defines radial velocity vector
-        rv = np.array([rad_vel1_int, rad_vel2_int])
+        rv1 = self.ws1_int.sel(range=self.rg1).mean()
+        rv2 = self.ws2_int.sel(range=self.rg2).mean()
+        rv = np.array([rv1, rv2])
         
         # Solves for average wind velocity
         equ_matrix_inv = np.linalg.inv(equ_matrix)
@@ -73,62 +69,64 @@ class Lidar_Dataset:
         
         return wind_vel_av
     
-    # Find wind speeds
+    # Finds wind speeds
     # Returns 1D array
     def wind_speed(self):
         wind_comp = self.wind_velocity()
         ws = np.hypot(wind_comp[[0], :], wind_comp[[1], :])
         return ws
     
-    # Plot radial wind speeds across a series of ranges over time
-    # Range limited to first 100 range values
+    # Plots radial wind speeds across a series of ranges over time
+    # Ranges limited to specified ranges
     def plot_radial_speed(self):
-        # Interpolates data over time distribution
-        rad_vel1 = self.l1.wind_speed.where(self.l1.qc_wind_speed==0)
-        rad_vel1_int = rad_vel1.interp(time=self.time)
-        rad_vel2 = self.l2.wind_speed.where(self.l2.qc_wind_speed==0)
-        rad_vel2_int = rad_vel2.interp(time=self.time)
-        
         # Defines range limit
         lim = (0, 100)
-        range_limit1 = rad_vel1_int.range[lim[0]:lim[1]]
-        radial_speeds1 = rad_vel1_int.values[lim[0]:lim[1]]
-        range_limit2 = rad_vel2_int.range[lim[0]:lim[1]]
-        radial_speeds2 = rad_vel2_int.values[lim[0]:lim[1]]
+        range_limit1 = self.ws1_int.range[lim[0]:lim[1]]
+        radial_speeds1 = self.ws1_int.values[lim[0]:lim[1]]
+        range_limit2 = self.ws2_int.range[lim[0]:lim[1]]
+        radial_speeds2 = self.ws2_int.values[lim[0]:lim[1]]
+        
+        # Defines interpolation function
+        coordinates1 = (range_limit1.values, self.time)
+        int_f1 = sp.interpolate.RegularGridInterpolator(coordinates1, radial_speeds1)
+        coordinates2 = (range_limit2.values, self.time)
+        int_f2 = sp.interpolate.RegularGridInterpolator(coordinates2, radial_speeds2)
                 
-        # Create heatmap of time and range against radial speed for lidar1
+        # Creates heatmap of time and range against radial speed for lidar1
         fig1 = plt.figure(figsize=(15, 5))
         ax1 = fig1.subplots()
-        image1 = ax1.pcolormesh(self.time, range_limit1, radial_speeds1)
+        #image1 = ax1.pcolormesh(self.time, range_limit1, radial_speeds1)
+        range_T1 = np.array(list(zip(range_limit1.values)))
+        image1 = ax1.pcolormesh(self.time, range_limit1, int_f1((range_T1, self.time)))
         ax1.set_title("Lidar 1 Radial Wind Speed")
         ax1.set_xlabel("Time (UTC)")
         ax1.set_ylabel("Range (m)")
         fig1.colorbar(image1, label="Radial Wind Speed (m/s)")
         plt.show()
         
-        # Create heatmap of time and range against radial speed for lidar2
+        # Creates heatmap of time and range against radial speed for lidar2
         fig2 = plt.figure(figsize=(15, 5))
         ax2 = fig2.subplots()
-        image2 = ax2.pcolormesh(self.time, range_limit2, radial_speeds2)
+        #image2 = ax2.pcolormesh(self.time, range_limit2, radial_speeds2)
+        range_T2 = np.array(list(zip(range_limit2.values)))
+        image2 = ax2.pcolormesh(self.time, range_limit2, int_f2((range_T2, self.time)))
         ax2.set_title("Lidar 2 Radial Wind Speed")
         ax2.set_xlabel("Time (UTC)")
         ax2.set_ylabel("Range (m)")
         fig2.colorbar(image2, label="Radial Wind Speed (m/s)")
         plt.show()
     
-    # Plot radial wind speeds at intersection point over time
+    # Plots radial wind speeds at intersection point over time
     def plot_radial_intersect(self):
         # Interpolates data over time distribution
-        rad_vel1 = self.l1.wind_speed.where(self.l1.qc_wind_speed==0).sel(range=self.rg1)
-        rad_vel1_int = rad_vel1.interp(time=self.time)
-        rad_vel2 = self.l2.wind_speed.where(self.l2.qc_wind_speed==0).sel(range=self.rg2)
-        rad_vel2_int = rad_vel2.interp(time=self.time)
+        rv1 = self.ws1_int.sel(range=self.rg1)
+        rv2 = self.ws2_int.sel(range=self.rg2)
         
-        # Create plot of time against lidar1 and lidar2 radial speeds
+        # Creates plot of time against lidar1 and lidar2 radial speeds
         fig = plt.figure(figsize=(15, 5))
         ax = fig.subplots()
-        ax.plot(self.time, rad_vel1_int, ".", label="Lidar 1")
-        ax.plot(self.time, rad_vel2_int, ".", label="Lidar 2")
+        ax.plot(self.time, rv1, ".", label="Lidar 1")
+        ax.plot(self.time, rv2, ".", label="Lidar 2")
         ax.grid(visible=True)
         ax.legend()
         ax.set_title("Radial Wind Speed at Intersection")
@@ -136,15 +134,15 @@ class Lidar_Dataset:
         ax.set_ylabel("Radial Wind Speed (m/s)")
         plt.show()
     
-    # Plot wind velocity components at intersection point over time
+    # Plots wind velocity components at intersection point over time
     def plot_components(self):  
         wind_comp = self.wind_velocity()
         
-        # Create plot of time against u and v component velocities
+        # Creates plot of time against u and v component velocities
         fig = plt.figure(figsize=(15, 5))
         ax = fig.subplots()
-        ax.plot(self.time, wind_comp[[0],:].transpose(), ".", label="u")
-        ax.plot(self.time, wind_comp[[1],:].transpose(), ".", label="v")
+        ax.plot(self.time, wind_comp[[0],:].transpose(), ".", label="U")
+        ax.plot(self.time, wind_comp[[1],:].transpose(), ".", label="V")
         ax.grid(visible=True)
         ax.legend()
         ax.set_title("Wind Components")
@@ -152,11 +150,11 @@ class Lidar_Dataset:
         ax.set_ylabel("Wind Speed (m/s)")
         plt.show()
     
-    # Plot wind speed at intersection point over time
+    # Plots wind speed at intersection point over time
     def plot_speed(self):
         speeds = self.wind_speed().transpose()
         
-        # Create plot of time against wind speed
+        # Creates plot of time against wind speed
         fig = plt.figure(figsize=(15, 5))
         ax = fig.subplots()
         ax.plot(self.time, speeds, ".")
@@ -166,12 +164,12 @@ class Lidar_Dataset:
         ax.set_ylabel("Wind Speed (m/s)")
         plt.show()
     
-    # Plot wind direction at intersection point over time
-    # Direction measured in degrees
+    # Plots wind direction at intersection point over time
+    # Directions measured in degrees
     def plot_direction(self):        
         wind_comp = self.wind_velocity()
         
-        # Calculate wind direction angles from component data
+        # Calculates wind direction angles from component data
         angles = np.arctan2(wind_comp[[1],:], wind_comp[[0],:])
         angles = (270 - angles) % 360
         
@@ -185,42 +183,49 @@ class Lidar_Dataset:
         ax.grid(visible=True)
         plt.show()
     
-    # Plot correlation coefficient over a series of ranges
-    # Range limited to first 100 range values
+    # Plots correlation coefficient over a series of ranges
+    # Ranges limited to specified ranges
     def plot_correlation(self):
-        # Interpolates data over time distribution
-        rad_vel1 = self.l1.wind_speed.where(self.l1.qc_wind_speed==0)
-        rad_vel1_int = rad_vel1.interp(time=self.time)
-        rad_vel2 = self.l2.wind_speed.where(self.l2.qc_wind_speed==0)
-        rad_vel2_int = rad_vel2.interp(time=self.time)
+        # Defines range limits
+        lim = (40, 110)
+        lim1 = self.ws1_int.range[lim[0]:lim[1]]
+        lim2 = self.ws2_int.range[lim[0]:lim[1]]
         
-        # Defines range limit
-        lim = (0, 120)
-        range_limit1 = rad_vel1_int.range[lim[0]:lim[1]]
-        range_limit2 = rad_vel2_int.range[lim[0]:lim[1]]
+        #real1 = ~np.isnan(self.ws1_int.sel(range=lim1))
+        #ws1 = self.ws1_int.sel(range=lim1)[real1]
         
-        coef = np.zeros((lim[1], lim[1]))
+        s1 = self.ws1_int.sel(range=lim1)
+        s2 = self.ws2_int.sel(range=lim2)
+        x, y = np.meshgrid(s2, s1)
+        coef = np.corrcoef(x, y)[0, 1]
+        
+        """
+        # Generate correlation coefficient data
+        coef = np.zeros(((lim[1] - lim[0]), (lim[1] - lim[0])))
         for r1 in range(lim[0], lim[1]):
             for r2 in range(lim[0], lim[1]):
-                rad1 = rad_vel1_int.sel(range=rad_vel1_int.range[r1])
-                rad2 = rad_vel2_int.sel(range=rad_vel2_int.range[r2])
-                real = ~np.isnan(rad1+rad2)
-                if np.sum(real)>30:
-                    corr_array = np.array([rad1[real],rad2[real]])
-                    corr_coef = np.corrcoef(corr_array)
-                    coef[r1, r2] = corr_coef[0, 1]
+                v1 = self.ws1_int.isel(range=r1)
+                v2 = self.ws2_int.isel(range=r2)
+                real = ~np.isnan(v1 + v2)
+                v1 = v1[real]
+                v2 = v2[real]
+                if len(v1) > 0 and len(v2) > 0:
+                    coef[r1 - lim[0], r2 - lim[0]] = np.corrcoef(v1, v2)[0, 1]
+                else:
+                    coef[r1 - lim[0], r2 - lim[0]] = np.nan
+        """
         
-        # Create heatmap of ranges against correlation coefficient
+        # Creates heatmap of ranges against correlation coefficient
         fig = plt.figure()
         ax = fig.subplots()
-        image = ax.pcolormesh(range_limit1, range_limit2, coef.T)
+        image = ax.pcolormesh(lim2, lim1, coef)
         ax.set_title("Correlation Coefficient")
-        ax.set_xlabel("Lidar 1 Range (m)")
-        ax.set_ylabel("Lidar 2 Range (m)")
+        ax.set_xlabel("Lidar 2 Range (m)")
+        ax.set_ylabel("Lidar 1 Range (m)")
         fig.colorbar(image, label="Radial Wind Speed (m/s)")
+        ax.axvline(self.rg2, color="r")
+        ax.axhline(self.rg1, color="r")
         plt.show()
-        
-        return coef, range_limit1, range_limit2
 #%%
 lidar1 = "sa5.lidar.z03.b0.20230726.002006.user5.vt.nc"
 lidar2 = "sgpdlrhi2S4.b2.20230726.002007.vt.nc"
@@ -228,7 +233,9 @@ elevation1 = 1.55 * (math.pi/180)
 elevation2 = 2.33 * (math.pi/180)
 azimuth1 = 309.98 * (math.pi/180)
 azimuth2 = 356.19 * (math.pi/180)
-range1 = 2925
-range2 = 1875
+range1 = 2925 #actual range from A5: 2929
+range2 = 1875 #actual range from A1: 1861
 
 Wind_Data = Lidar_Dataset(lidar1, lidar2, elevation1, elevation2, azimuth1, azimuth2, range1, range2)
+
+Wind_Data.plot_correlation()
