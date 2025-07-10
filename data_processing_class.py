@@ -186,49 +186,41 @@ class Lidar_Dataset:
     # Plots correlation coefficient over a series of ranges
     # Ranges limited to specified ranges
     def plot_correlation(self):
-        # Defines range limits
-        lim = (40, 110)
-        lim1 = self.ws1_int.range[lim[0]:lim[1]]
-        lim2 = self.ws2_int.range[lim[0]:lim[1]]
         
-        #real1 = ~np.isnan(self.ws1_int.sel(range=lim1))
-        #ws1 = self.ws1_int.sel(range=lim1)[real1]
+        #detrended RWS
+        ws1_det = (self.ws1_int - self.ws1_int.mean(dim='time')).dropna(dim='range', how='all')
+        ws2_det = (self.ws2_int - self.ws2_int.mean(dim='time')).dropna(dim='range', how='all')
         
-        s1 = self.ws1_int.sel(range=lim1)
-        s2 = self.ws2_int.sel(range=lim2)
-        x, y = np.meshgrid(s2, s1)
-        coef = np.corrcoef(x, y)[0, 1]
+        #expand over other range
+        ws1_exp = ws1_det.rename({'range':'range1'}).expand_dims({'range': ws2_det.range}).rename({'range':'range2'}).transpose('range1','range2','time')  # (time, x, y)
+        ws2_exp = ws2_det.rename({'range':'range2'}).expand_dims({'range': ws1_det.range}).rename({'range':'range1'}) # (time, x, y)
         
-        """
-        # Generate correlation coefficient data
-        coef = np.zeros(((lim[1] - lim[0]), (lim[1] - lim[0])))
-        for r1 in range(lim[0], lim[1]):
-            for r2 in range(lim[0], lim[1]):
-                v1 = self.ws1_int.isel(range=r1)
-                v2 = self.ws2_int.isel(range=r2)
-                real = ~np.isnan(v1 + v2)
-                v1 = v1[real]
-                v2 = v2[real]
-                if len(v1) > 0 and len(v2) > 0:
-                    coef[r1 - lim[0], r2 - lim[0]] = np.corrcoef(v1, v2)[0, 1]
-                else:
-                    coef[r1 - lim[0], r2 - lim[0]] = np.nan
-        """
+        # Compute correlation matrix: corr(x, y)
+        numerator = (ws1_exp*ws2_exp).mean(dim='time')
+        denominator = ws1_exp.std(dim='time') *  ws2_exp.std(dim='time') 
+        
+        corr = numerator / denominator
         
         # Creates heatmap of ranges against correlation coefficient
         fig = plt.figure()
         ax = fig.subplots()
-        image = ax.pcolormesh(lim2, lim1, coef)
+        plt.pcolor(corr.range1,corr.range2, corr.T,cmap='seismic',vmin=-1,vmax=1)
         ax.set_title("Correlation Coefficient")
-        ax.set_xlabel("Lidar 2 Range (m)")
-        ax.set_ylabel("Lidar 1 Range (m)")
-        fig.colorbar(image, label="Radial Wind Speed (m/s)")
-        ax.axvline(self.rg2, color="r")
-        ax.axhline(self.rg1, color="r")
-        plt.show()
+        ax.set_xlabel("Lidar 1 Range (m)")
+        ax.set_ylabel("Lidar 2 Range (m)")
+
+        ax.axvline(self.rg1, color="k")
+        ax.axhline(self.rg2, color="k")
+        plt.colorbar(label='Correlation coefficient')
+        plt.xlim([0,self.rg1+300])
+        plt.ylim([0,self.rg2+300])
+        plt.grid()
+        
+        return fig
+        
 #%%
-lidar1 = "sa5.lidar.z03.b0.20230726.002006.user5.vt.nc"
-lidar2 = "sgpdlrhi2S4.b2.20230726.002007.vt.nc"
+lidar1 = "C:/Users/sletizia/OneDrive - NREL/Desktop/Main/ENDURA/awaken_lidar_processing/data/awaken/sa5.lidar.z03.b0/sa5.lidar.z03.b0.20230726.002006.user5.vt.nc"
+lidar2 = "C:/Users/sletizia/OneDrive - NREL/Desktop/Main/ENDURA/awaken_lidar_processing/data/awaken/arm.lidar.sgp_s4.rhi2.b2/sgpdlrhi2S4.b2.20230726.002007.vt.nc"
 elevation1 = 1.55 * (math.pi/180)
 elevation2 = 2.33 * (math.pi/180)
 azimuth1 = 309.98 * (math.pi/180)
@@ -237,5 +229,6 @@ range1 = 2925 #actual range from A5: 2929
 range2 = 1875 #actual range from A1: 1861
 
 Wind_Data = Lidar_Dataset(lidar1, lidar2, elevation1, elevation2, azimuth1, azimuth2, range1, range2)
+wind_vel=Wind_Data.wind_velocity()
 
-Wind_Data.plot_correlation()
+fig_corr=Wind_Data.plot_correlation()
