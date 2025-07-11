@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import scipy as sp
 #%% Defines class for a pair of xarray lidar datasets
 # Assumes datasets have equal number of ranges
-class Lidar_Dataset:
+class Dual_Doppler_Processing:
     def __init__(self, lidar1, lidar2, elevation1, elevation2, azimuth1, azimuth2, range1, range2):
         self.el1 = elevation1
         self.el2 = elevation2
@@ -15,13 +15,10 @@ class Lidar_Dataset:
         self.rg2 = range2
         
         # Reorganizes lidar1 dataset so that scanID is replaced with time
-        self.l1 = xr.open_dataset(lidar1)
-        self.l1 = self.l1.assign_coords(scanID=self.l1.time)
-        self.l1 = self.l1.drop_vars(["time", "beamID"]).squeeze(drop=True).rename({"scanID": "time"})
+        self.l1 = lidar1
+        
         # Reorganizes lidar2 dataset so that scanID is replaced with time
-        self.l2 = xr.open_dataset(lidar2)
-        self.l2 = self.l2.assign_coords(scanID=self.l2.time)
-        self.l2 = self.l2.drop_vars(["time", "beamID"]).squeeze(drop=True).rename({"scanID": "time"})
+        self.l2 = lidar2
         
         # Defines uniform time distribution
         t1 = self.l1.time.min().values
@@ -35,13 +32,13 @@ class Lidar_Dataset:
     # Returns 2D vectors
     def wind_velocity(self):
         # Defines transformation matrix
-        row1 = [math.cos(self.el1) * math.sin(self.az1), math.cos(self.el1) * math.cos(self.az1)]
-        row2 = [math.cos(self.el2) * math.sin(self.az2), math.cos(self.el2) * math.cos(self.az2)]
+        row1 = [self.cosd(self.el1) * self.sind(self.az1), self.cosd(self.el1) * self.cosd(self.az1)]
+        row2 = [self.cosd(self.el2) * self.sind(self.az2), self.cosd(self.el2) * self.cosd(self.az2)]
         equ_matrix = np.array([row1, row2])
         
         # Defines radial velocity vector
-        rv1 = self.ws1_int.sel(range=self.rg1)
-        rv2 = self.ws2_int.sel(range=self.rg2)
+        rv1 = self.ws1_int.interp(range=self.rg1)
+        rv2 = self.ws2_int.interp(range=self.rg2)
         rv = np.array([rv1, rv2])
     
         # Solves for wind velocity
@@ -54,8 +51,8 @@ class Lidar_Dataset:
     # Returns 2D vector
     def av_wind_velocity(self):      
         # Defines transformation matrix
-        row1 = [math.cos(self.el1) * math.sin(self.az1), math.cos(self.el1) * math.cos(self.az1)]
-        row2 = [math.cos(self.el2) * math.sin(self.az2), math.cos(self.el2) * math.cos(self.az2)]
+        row1 = [self.cosd(self.el1) * self.sind(self.az1), self.cosd(self.el1) * self.cosd(self.az1)]
+        row2 = [self.cosd(self.el2) * self.sind(self.az2), self.cosd(self.el2) * self.cosd(self.az2)]
         equ_matrix = np.array([row1, row2])
         
         # Defines radial velocity vector
@@ -217,18 +214,24 @@ class Lidar_Dataset:
         plt.grid()
         
         return fig
-        
-#%%
-lidar1 = "C:/Users/sletizia/OneDrive - NREL/Desktop/Main/ENDURA/awaken_lidar_processing/data/awaken/sa5.lidar.z03.b0/sa5.lidar.z03.b0.20230726.002006.user5.vt.nc"
-lidar2 = "C:/Users/sletizia/OneDrive - NREL/Desktop/Main/ENDURA/awaken_lidar_processing/data/awaken/arm.lidar.sgp_s4.rhi2.b2/sgpdlrhi2S4.b2.20230726.002007.vt.nc"
-elevation1 = 1.55 * (math.pi/180)
-elevation2 = 2.33 * (math.pi/180)
-azimuth1 = 309.98 * (math.pi/180)
-azimuth2 = 356.19 * (math.pi/180)
-range1 = 2925 #actual range from A5: 2929
-range2 = 1875 #actual range from A1: 1861
+    
+    def cosd(self,angle):
+        return math.cos(math.radians(angle))
+     
+    def sind(self,angle):
+        return math.sin(math.radians(angle))
+    
+# #%%
+# lidar1 = "C:/Users/sletizia/OneDrive - NREL/Desktop/Main/ENDURA/awaken_lidar_processing/data/awaken/sa5.lidar.z03.b0/sa5.lidar.z03.b0.20230726.002006.user5.vt.nc"
+# lidar2 = "C:/Users/sletizia/OneDrive - NREL/Desktop/Main/ENDURA/awaken_lidar_processing/data/awaken/arm.lidar.sgp_s4.rhi2.b2/sgpdlrhi2S4.b2.20230726.002007.vt.nc"
+# elevation1 = 1.55 * (math.pi/180)
+# elevation2 = 2.33 * (math.pi/180)
+# azimuth1 = 309.98 * (math.pi/180)
+# azimuth2 = 356.19 * (math.pi/180)
+# range1 = 2925 #actual range from A5: 2929
+# range2 = 1875 #actual range from A1: 1861
 
-Wind_Data = Lidar_Dataset(lidar1, lidar2, elevation1, elevation2, azimuth1, azimuth2, range1, range2)
-wind_vel=Wind_Data.wind_velocity()
+# Wind_Data = Lidar_Dataset(lidar1, lidar2, elevation1, elevation2, azimuth1, azimuth2, range1, range2)
+# wind_vel=Wind_Data.wind_velocity()
 
-fig_corr=Wind_Data.plot_correlation()
+# fig_corr=Wind_Data.plot_correlation()
