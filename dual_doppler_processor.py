@@ -2,11 +2,12 @@ import math
 import numpy as np
 import xarray as xr
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import scipy as sp
 #%% Defines class for a pair of xarray lidar datasets
 # Assumes datasets have equal number of ranges
 class Dual_Doppler_Processing:
-    def __init__(self, lidar1, lidar2, elevation1, elevation2, azimuth1, azimuth2, range1, range2):
+    def __init__(self, lidar1, lidar2, elevation1, elevation2, azimuth1, azimuth2, range1, range2,time_step=1,max_time_diff=2):
         self.el1 = elevation1
         self.el2 = elevation2
         self.az1 = azimuth1
@@ -23,10 +24,23 @@ class Dual_Doppler_Processing:
         # Defines uniform time distribution
         t1 = self.l1.time.min().values
         t2 = self.l1.time.max().values
-        self.time = np.arange(t1, t2, np.timedelta64(1, "s"))
-        # Interpolates wind speed over uniform time distribution
-        self.ws1_int = self.l1.wind_speed.where(self.l1.qc_wind_speed==0).interp(time=self.time)
-        self.ws2_int = self.l2.wind_speed.where(self.l2.qc_wind_speed==0).interp(time=self.time)
+        self.time = np.arange(t1, t2, np.timedelta64(time_step, "s"))
+        tnum=(self.time-np.datetime64('1970-01-01T00:00:00'))/np.timedelta64(1,'s')
+        
+        #calculate the difference between the interpolation time and the nearest available time
+        tnum1=(self.l1.time-np.datetime64('1970-01-01T00:00:00'))/np.timedelta64(1,'s')
+        tnum1=tnum1.expand_dims({"range":self.l1.range})
+        tnum1=tnum1.where(self.l1.qc_wind_speed==0)
+        time_diff1=tnum1.interp(time=self.time,method="nearest")-tnum
+        
+        tnum2=(self.l2.time-np.datetime64('1970-01-01T00:00:00'))/np.timedelta64(1,'s')
+        tnum2=tnum2.expand_dims({"range":self.l2.range})
+        tnum2=tnum2.where(self.l2.qc_wind_speed==0)
+        time_diff2=tnum2.interp(time=self.time,method="nearest")-tnum
+        
+        #interpolate radial wind speed over uniform time distribution
+        self.ws1_int = self.l1.wind_speed.where(self.l1.qc_wind_speed==0).interp(time=self.time).where(np.abs(time_diff1)<max_time_diff)
+        self.ws2_int = self.l2.wind_speed.where(self.l2.qc_wind_speed==0).interp(time=self.time).where(np.abs(time_diff2)<max_time_diff)
         
     # Finds wind velocities
     # Returns 2D vectors
@@ -45,7 +59,7 @@ class Dual_Doppler_Processing:
         equ_matrix_inv = np.linalg.inv(equ_matrix)
         wind_vel = np.matmul(equ_matrix_inv, rv)
         
-        return wind_vel
+        return wind_vel[0,:],wind_vel[1,:]
     
     # Finds average wind velocities
     # Returns 2D vector
@@ -68,10 +82,14 @@ class Dual_Doppler_Processing:
     
     # Finds wind speeds
     # Returns 1D array
-    def wind_speed(self):
-        wind_comp = self.wind_velocity()
-        ws = np.hypot(wind_comp[[0], :], wind_comp[[1], :])
-        return ws
+    def wind_speed_direction(self,u=None,v=None):
+        if u is None and v is None:
+            u,v = self.wind_velocity()
+            
+        ws = np.hypot(u,v)
+        wd = (270-np.degrees(np.arctan2(v,u)))%360
+        
+        return ws, wd
     
     # Plots radial wind speeds across a series of ranges over time
     # Ranges limited to specified ranges
@@ -132,20 +150,36 @@ class Dual_Doppler_Processing:
         plt.show()
     
     # Plots wind velocity components at intersection point over time
-    def plot_components(self):  
-        wind_comp = self.wind_velocity()
+    def plot_velocities(self,u=None,v=None):  
+        if u is None or v is None:
+            u,v = self.wind_velocity()
+        
+        ws,wd=self.wind_speed_direction(u,v)
+            
+        date=str(self.time[0])[:10]
         
         # Creates plot of time against u and v component velocities
         fig = plt.figure(figsize=(15, 5))
-        ax = fig.subplots()
-        ax.plot(self.time, wind_comp[[0],:].transpose(), ".", label="U")
-        ax.plot(self.time, wind_comp[[1],:].transpose(), ".", label="V")
+        ax = fig.add_subplot(2,1,1)
+        ax.plot(self.time, u, ".b", label="U")
+        ax.plot(self.time, v, ".r", label="V")
+        ax.plot(self.time, ws, ".k", label="Wind speed")
         ax.grid(visible=True)
         ax.legend()
-        ax.set_title("Wind Components")
+        ax.set_title(f"Wind velocity on {date}")
         ax.set_xlabel("Time (UTC)")
-        ax.set_ylabel("Wind Speed (m/s)")
-        plt.show()
+        ax.set_ylabel(r"Wind velocity [m s$^{-1}$]")
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M')) 
+        
+        ax = fig.add_subplot(2,1,2)
+        ax.plot(self.time, wd, ".k")
+        ax.grid(visible=True)
+        ax.set_xlabel("Time (UTC)")
+        ax.set_ylabel(r"Wind direction [$^\circ$C]")
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M')) 
+        plt.tight_layout()
+        
+        return fig,ax
     
     # Plots wind speed at intersection point over time
     def plot_speed(self):
@@ -185,23 +219,30 @@ class Dual_Doppler_Processing:
     def plot_correlation(self):
         
         #detrended RWS
-        ws1_det = (self.ws1_int - self.ws1_int.mean(dim='time')).dropna(dim='range', how='all')
-        ws2_det = (self.ws2_int - self.ws2_int.mean(dim='time')).dropna(dim='range', how='all')
-        
-        #expand over other range
-        ws1_exp = ws1_det.rename({'range':'range1'}).expand_dims({'range': ws2_det.range}).rename({'range':'range2'}).transpose('range1','range2','time')  # (time, x, y)
-        ws2_exp = ws2_det.rename({'range':'range2'}).expand_dims({'range': ws1_det.range}).rename({'range':'range1'}) # (time, x, y)
-        
-        # Compute correlation matrix: corr(x, y)
-        numerator = (ws1_exp*ws2_exp).mean(dim='time')
-        denominator = ws1_exp.std(dim='time') *  ws2_exp.std(dim='time') 
-        
-        corr = numerator / denominator
+        ws1_avg=self.ws1_int.resample(time='10min').mean().interp(time=self.time,method='nearest').ffill(dim='time')
+        ws2_avg=self.ws2_int.resample(time='10min').mean().interp(time=self.time,method='nearest').ffill(dim='time')
+        ws1_det=self.ws1_int-ws1_avg
+        ws2_det=self.ws2_int-ws2_avg
+        range1_sel=np.where((~np.isnan(ws1_det)).sum(dim="time").values>0)[0]
+        range2_sel=np.where((~np.isnan(ws2_det)).sum(dim="time").values>0)[0]
+        corr=np.zeros((len(ws1_det.range),len(ws2_det.range)))
+        for i_r1 in range1_sel:
+            for i_r2 in range2_sel:
+               
+                ws1=ws1_det.isel(range=i_r1).values
+                ws2=ws2_det.isel(range=i_r2).values
+                reals=~np.isnan(ws1+ws2)
+                if np.sum(reals)>0:
+                    corr[i_r1,i_r2]=np.corrcoef(ws1[reals],ws2[reals])[0,1]
+            print(i_r1)
+                
+                
+                
         
         # Creates heatmap of ranges against correlation coefficient
         fig = plt.figure()
         ax = fig.subplots()
-        plt.pcolor(corr.range1,corr.range2, corr.T,cmap='seismic',vmin=-1,vmax=1)
+        plt.pcolor(self.ws1_int.range,self.ws2_int.range, corr.T,cmap='seismic',vmin=-1,vmax=1)
         ax.set_title("Correlation Coefficient")
         ax.set_xlabel("Lidar 1 Range (m)")
         ax.set_ylabel("Lidar 2 Range (m)")
@@ -213,7 +254,7 @@ class Dual_Doppler_Processing:
         plt.ylim([0,self.rg2+300])
         plt.grid()
         
-        return fig
+        return fig,ax,corr
     
     def cosd(self,angle):
         return math.cos(math.radians(angle))

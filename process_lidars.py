@@ -99,7 +99,11 @@ def dual_doppler_rec(files1,files2, elevation1, elevation2, azimuth1, azimuth2, 
             lidar2=l2
 
     lproc = ddp.Dual_Doppler_Processing(lidar1,lidar2, elevation1, elevation2, azimuth1, azimuth2, range1, range2)
-    wind_vel=lproc.wind_velocity()
+    u,v=lproc.wind_velocity()
+    fig_ws=lproc.plot_velocities(u,v)
+    fig_corr=lproc.plot_correlation()
+    
+    
             
 
         # if delete:
