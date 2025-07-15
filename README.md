@@ -13,4 +13,4 @@ To add those dependencies in conda, clone the source code on the local machine. 
 
 `pip install .`
 
-The code uses config files which can be found at https://drive.google.com/drive/folders/1KRegx4QaQyNuewvYMmzH0FC8Rt4Z6pB9
+The code uses config files which can be found at https://drive.google.com/drive/folders/1KRegx4QaQyNuewvYMmzH0FC8Rt4Z6pB9.
