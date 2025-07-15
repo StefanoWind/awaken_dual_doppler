@@ -24,11 +24,11 @@ warnings.filterwarnings('ignore')
 
 #users inputs
 if len(sys.argv)==1:
-    t_start='2023-07-26' #start date
-    t_end='2023-07-27' #end date
+    t_start='2023-07-27' #start date
+    t_end='2023-07-28' #end date
     download=True #download new data?
     mfa=False
-    path_config=os.path.join(cd,'configs/config_awaken_vt.yaml') #config path
+    path_config=os.path.join(cd,'configs/config.yaml') #config path
 else:
     t_start=sys.argv[1] #start date
     t_end=sys.argv[2]  #end date
@@ -60,7 +60,7 @@ for t1,t2 in zip(time_bin[:-1],time_bin[1:]):
         save_path=os.path.join(config['path_data'],channel.replace('a0','b0'))
         
         if download==True:
-            if config['ext1'][channel]=='':
+            if config['ext1'][c]=='':
                 _filter = {
                     'Dataset': channel,
                     'date_time': {
