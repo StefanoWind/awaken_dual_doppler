@@ -34,7 +34,6 @@ class Dual_Doppler_Processing:
         self.rg1 = range1
         self.rg2 = range2
         
-        # Reorganizes lidar1 dataset so that scanID is replaced with time
         self.l1 = lidar1
         self.l2 = lidar2
         
@@ -281,35 +280,16 @@ class Dual_Doppler_Processing:
         ws2_avg=self.ws2_int.resample(time='10min').mean().interp(time=self.time,method='nearest').ffill(dim='time')
         ws1_det=self.ws1_int-ws1_avg
         ws2_det=self.ws2_int-ws2_avg
-        
-        # Convert radial speed arrays into 3D
-        rs1 = np.tile(ws1_det.values[:, np.newaxis, :], (1, len(ws2_det.range), 1))
-        rs2 = np.tile(ws2_det.values[np.newaxis, :, :], (len(ws1_det.range), 1, 1))
-        
-        # Select real values
-        real_mask = ~np.isnan(rs1) & ~np.isnan(rs2)
-        
-        # Calculate mean of time series and replace nan
-        rs1[~real_mask] = np.nan
-        rs2[~real_mask] = np.nan
-        rs1_demean = rs1 - np.nanmean(rs1, axis=2, keepdims=True)
-        rs2_demean = rs2 - np.nanmean(rs2, axis=2, keepdims=True)
-        
-        # Calculate covariance
-        cov = np.nansum(rs1_demean * rs2_demean, axis=2)
-        
-        # Calculate product of standard deviations
-        rs1_sqsum = np.nansum(rs1_demean**2, axis=2)
-        rs2_sqsum = np.nansum(rs2_demean**2, axis=2)
-        stand_devs = np.sqrt(rs1_sqsum * rs2_sqsum)
-        
-        # Calculates pearson correlation coefficient. Ignores undefined results
-        with np.errstate(invalid='ignore', divide='ignore'):
-            corr = cov / stand_devs
-        
-        # Filters out ranges with less than two real data points
-        valid_counts = np.sum(real_mask, axis=2)
-        corr[valid_counts < self.config["correlation_valid"]] = np.nan
+        range1_sel=np.where((~np.isnan(ws1_det)).sum(dim="time").values>0)[0]
+        range2_sel=np.where((~np.isnan(ws2_det)).sum(dim="time").values>0)[0]
+        corr=np.zeros((len(ws1_det.range),len(ws2_det.range)))
+        for i_r1 in range1_sel:
+            for i_r2 in range2_sel:
+                ws1=ws1_det.isel(range=i_r1).values
+                ws2=ws2_det.isel(range=i_r2).values
+                reals=~np.isnan(ws1+ws2)
+                if np.sum(reals)>0:
+                    corr[i_r1,i_r2]=np.corrcoef(ws1[reals],ws2[reals])[0,1]
         
         # Creates heatmap of ranges against correlation coefficient
         date=str(self.time[0])[:10]
