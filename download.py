@@ -32,12 +32,12 @@ if len(sys.argv)==1:
 else:
     t_start=sys.argv[1] #start date
     t_end=sys.argv[2]  #end date
-    download=sys.argv[3] #download new data?
-    mfa=sys.argv[4] #use MFA on WDH
+    download=sys.argv[3]=="True" #download new data?
+    mfa=sys.argv[4]=="True" #use MFA on WDH
     path_config=os.path.join(cd,'config',sys.argv[5])#config path
     
 #%% Initalization
-print(f'Downloading lidar data from {t_start} to {t_end}: download={download},config={path_config}.')
+print(f'Downloading lidar data from {t_start} to {t_end}: download={download}, MFA={mfa}, config={path_config}.')
 
 #configs
 with open(path_config, 'r') as fid:
