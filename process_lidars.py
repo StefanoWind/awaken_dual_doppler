@@ -41,7 +41,7 @@ if len(sys.argv)==1:
 else:
     sdate=sys.argv[1]
     edate=sys.argv[2] 
-    delete=sys.argv[3]=="True"
+    replace=sys.argv[3]=="True"
     delete=sys.argv[4]=="True"
     path_config=sys.argv[5]
     mode=sys.argv[6]#
