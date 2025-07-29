@@ -24,11 +24,11 @@ warnings.filterwarnings('ignore')
 
 #users inputs
 if len(sys.argv)==1:
-    t_start='2023-07-27' #start date
-    t_end='2023-07-28' #end date
+    t_start='2023-08-03' #start date
+    t_end='2023-08-04' #end date
     download=True #download new data?
-    mfa=False
-    path_config=os.path.join(cd,'configs/config.yaml') #config path
+    mfa=True
+    path_config=os.path.join(cd,'configs/config_scada.yaml') #config path
 else:
     t_start=sys.argv[1] #start date
     t_end=sys.argv[2]  #end date
