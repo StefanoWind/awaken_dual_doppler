@@ -13,7 +13,8 @@ import xarray as xr
 import matplotlib
 matplotlib.rcParams['font.family'] = 'serif'
 matplotlib.rcParams['mathtext.fontset'] = 'cm'
-matplotlib.rcParams['font.size'] = 14
+matplotlib.rcParams['font.size'] = 12
+matplotlib.rcParams['savefig.dpi'] = 500
 plt.close('all')
 
 #%% Inputs
@@ -41,6 +42,7 @@ ele_A5=1.55#[deg]
 target='G02'
 alt_target=319#[m]
 x_upstream=-2#[D]
+ar=0.5
 
 #graphics
 rmax=5000
@@ -83,8 +85,8 @@ x_A5,y_A5,zone_A5_1,zone_A5_2=utm.from_latlon(lat_A5, lon_A5)
 z_A5=alt_A5+H_A5
 
 #location G02
-D=Turbines['Diameter'][Turbines.name==target].values
-H=Turbines['Hub height'][Turbines.name==target].values
+D=Turbines['Diameter'][Turbines.name==target].values[0]
+H=Turbines['Hub height'][Turbines.name==target].values[0]
 x_target=Turbines['x_utm'][Turbines.name==target].values
 y_target=Turbines['y_utm'][Turbines.name==target].values+x_upstream*D
 z_target=alt_target+H
@@ -123,24 +125,34 @@ fig=plt.figure(figsize=(18,10))
 ax = fig.add_subplot(111, projection='3d')
 sel_x=np.abs(X_topo[0,:]-x_target)<rmax
 sel_y=np.abs(Y_topo[:,0]-y_target)<rmax
-surf = ax.plot_surface(X_topo[sel_y,:][:,sel_x], Y_topo[sel_y,:][:,sel_x], Z_topo[sel_y,:][:,sel_x], cmap='copper',linewidth=0, antialiased=False,alpha=0.5)
-plt.plot(x_A1,y_A1,z_A1,'xg',markersize=10)
-plt.plot(x_A5,y_A5,z_A5,'xb',markersize=10)
-plt.plot(x_target,y_target,z_target,'.r',markersize=10,label='Target')
-plt.plot(x_T,y_T,z_T+H,'.k',markersize=10,label='Turbine')
+surf = ax.plot_surface(X_topo[sel_y,:][:,sel_x]-x_target, Y_topo[sel_y,:][:,sel_x]-y_target, Z_topo[sel_y,:][:,sel_x]-z_target, cmap='copper',linewidth=0, antialiased=False,alpha=0.5)
+plt.plot(x_A1-x_target,y_A1-y_target,z_A5-z_target,'xg',markersize=10,zorder=10)
+plt.plot(x_A5-x_target,y_A5-y_target,z_A5-z_target,'xb',markersize=10,zorder=10)
 
-plt.plot(x_beam_A1,y_beam_A1,z_beam_A1,'.g',markersize=3,
-         label=r"$\rho="+str(int(rho_A1))+r"$ m, $\theta="+str(np.round(azi_A1,2))+r"^\circ$ , $\beta="+str(np.round(ele_A1,2))+r"^\circ$")
-plt.plot(x_beam_A5,y_beam_A5,z_beam_A5,'.b',markersize=3,
-         label=r"$\rho="+str(int(rho_A5))+r"$ m, $\theta="+str(np.round(azi_A5,2))+r"^\circ$ , $\beta="+str(np.round(ele_A5,2))+r"^\circ$")
 
-plt.xlim([-rmax+x_target,rmax+x_target])
-plt.ylim([-rmax+y_target,rmax+y_target])
-ax.set_xlabel('W-E [m]')
-ax.set_ylabel('S-N [m]')
-ax.set_zlabel('Height ASL [m]')
+
+for x,y,z in zip(x_T-x_target,y_T-y_target,z_T-z_target):
+    plt.plot([x,x],[y,y],[z,z+H],color='k',linewidth=1, zorder=10)
+    plt.plot([x,x+D/2*np.cos(np.radians(30))],[y,y],[z+H,z+H-D/2*np.sin(np.radians(30))],color='k', zorder=10)
+    plt.plot([x,x-D/2*np.cos(np.radians(30))],[y,y],[z+H,z+H-D/2*np.sin(np.radians(30))],color='k', zorder=10)
+    plt.plot([x,x],[y,y],[z+H,z+H+D/2],color='k', zorder=10)
+
+plt.plot(x_beam_A1-x_target,y_beam_A1-y_target,z_beam_A1-z_target,'.g',markersize=3,
+         label=r"$\rho="+str(int(rho_A1))+r"$ m, $\theta="+str(np.round(azi_A1,2))+r"^\circ$ , $\beta="+str(np.round(ele_A1,2))+r"^\circ$",zorder=10)
+plt.plot(x_beam_A5-x_target,y_beam_A5-y_target,z_beam_A5-z_target,'.b',markersize=3,
+         label=r"$\rho="+str(int(rho_A5))+r"$ m, $\theta="+str(np.round(azi_A5,2))+r"^\circ$ , $\beta="+str(np.round(ele_A5,2))+r"^\circ$",zorder=10)
+
+plt.plot(0,0,0,'.r',markersize=10,label='Target',zorder=10)
+
+plt.xlim([-rmax,rmax])
+plt.ylim([-rmax,rmax])
+ax.set_xlabel('W-E [m]',labelpad=20)
+ax.set_ylabel('S-N [m]',labelpad=20)
+ax.set_zlabel('Height [m]')
 ax.view_init(90,-90)
-ax.set_box_aspect((1,1,0.5))
+
+ax.set_aspect('equal')
+ax.set_zticks([-100,0,100])
 plt.legend()
 ax.view_init(26, -60)
 
@@ -161,3 +173,4 @@ ax.set_xlabel('W-E [m]')
 ax.set_ylabel('S-N [m]')
 ax.set_zlabel('Height ASL [m]')
 ax.set_aspect("equal")
+
