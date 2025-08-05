@@ -21,7 +21,6 @@ import yaml
 from multiprocessing import Pool
 from matplotlib import pyplot as plt
 import xarray as xr
-from datetime import datetime
 import logging
 import re
 import glob
@@ -33,8 +32,8 @@ warnings.filterwarnings('ignore')
 
 #users inputs
 if len(sys.argv)==1:
-    sdate='2023-07-27' #start date
-    edate='2023-07-28' #end date
+    sdate='2023-07-31' #start date
+    edate='2023-08-01' #end date
     replace=False#replace existing files?
     delete=False #delete input files?
     path_config=os.path.join(cd,'configs/config.yaml') #config path
@@ -42,7 +41,7 @@ if len(sys.argv)==1:
 else:
     sdate=sys.argv[1]
     edate=sys.argv[2] 
-    delete=sys.argv[3]=="True"
+    replace=sys.argv[3]=="True"
     delete=sys.argv[4]=="True"
     path_config=sys.argv[5]
     mode=sys.argv[6]#
@@ -56,6 +55,8 @@ with open(path_config, 'r') as fid:
 #initialize main logger
 logfile_main=os.path.join(cd,'log',datetime.strftime(datetime.now(), '%Y%m%d.%H%M%S'))+'_errors.log'
 os.makedirs('log',exist_ok=True)
+for handler in logging.root.handlers[:]:
+    logging.root.removeHandler(handler)
 
 #%% Functions
 def standardize_file(file,save_path_stand,config,logfile_main,sdate,edate,replace,delete):
@@ -73,67 +74,101 @@ def standardize_file(file,save_path_stand,config,logfile_main,sdate,edate,replac
                 traceback.print_exc(file=lf)
                 lf.write('\n --------------------------------- \n')
                 
-def dual_doppler_rec(files1,files2, range1, range2,time_step,save_path,logfile_main,replace):
-    # try:
-        # logfile=os.path.join(cd,'log',os.path.basename(file).replace('nc','log'))
-    
-    os.makedirs(save_path,exist_ok=True)
-    
-    #concatenate daily files
-    lidar1=xr.Dataset()
-    lidar2=xr.Dataset()
-    for file1,file2 in zip(files1,files2):
-        l1=xr.open_dataset(file1)
-        l1=l1.assign_coords(scanID=l1.time)
-        l1=l1.drop_vars(["time", "beamID"]).squeeze(drop=True).rename({"scanID": "time"})
+def dual_doppler_rec(files,sites,date,config,save_path,logfile_main,replace):
+    try:
+        #compose filename
+        filename=f'{os.path.basename(save_path)}.{date}.000000.nc'
+        os.makedirs(save_path,exist_ok=True)
         
-        if 'wind_speed' in lidar1.data_vars:
-            lidar1=xr.concat([lidar1,l1],dim='time')
-        else:
-            lidar1=l1
+        #create logger
+        logger = logging.getLogger("my_logger")
+        if logger.hasHandlers():
+            logger.handlers.clear()
+        logger.setLevel(logging.DEBUG)  # Set level to DEBUG to cap
+        console_handler = logging.StreamHandler()
+        file_handler = logging.FileHandler(os.path.join(save_path,filename.replace('nc','log')))
+        console_handler.setLevel(logging.INFO)
+        file_handler.setLevel(logging.DEBUG)
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        console_handler.setFormatter(formatter)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
+        logger.addHandler(file_handler)
+        
+        #find files
+        files1=np.array(files[sites[0]])[np.array(dates[sites[0]])==date]
+        files2=np.array(files[sites[1]])[np.array(dates[sites[1]])==date]
+        if len(files1)==0 or len(files2)==0:
+            raise BaseException(f'No files on {date}')
+        logger.info(f"Building {filename} from {len(files1)} files from lidar 1 and {len(files2)} files from lidar 2")
+        
+        #concatenate daily files
+        lidar1=xr.Dataset()
+        for file1 in files1:
+            try:
+                l1=xr.open_dataset(file1)
+                l1=l1.assign_coords(scanID=l1.time)
+                l1=l1.drop_vars(["time", "beamID"]).squeeze(drop=True).rename({"scanID": "time"})
+                
+                if 'wind_speed' in lidar1.data_vars:
+                    lidar1=xr.concat([lidar1,l1],dim='time')
+                else:
+                    lidar1=l1
+            except:
+                with open(logfile_main, 'a') as lf:
+                    lf.write(f"{datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M:%S')} - ERROR - Error reading file {file1}: \n")
+                    traceback.print_exc(file=lf)
+                    lf.write('\n --------------------------------- \n')
+                    
+        lidar2=xr.Dataset()            
+        for file2 in files2:
+            try:
+                l2=xr.open_dataset(file2)
+                l2=l2.assign_coords(scanID=l2.time)
+                l2=l2.drop_vars(["time", "beamID"]).squeeze(drop=True).rename({"scanID": "time"})
+                
+                if 'wind_speed' in lidar2.data_vars:
+                    lidar2=xr.concat([lidar2,l2],dim='time')
+                else:
+                    lidar2=l2
+            except:
+                with open(logfile_main, 'a') as lf:
+                    lf.write(f"{datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M:%S')} - ERROR - Error reading file {file2}: \n")
+                    traceback.print_exc(file=lf)
+                    lf.write('\n --------------------------------- \n')
+    
+        lproc = ddp.Dual_Doppler_Processing(lidar1,lidar2,config['range'][sites[0]],config['range'][sites[1]],config,logger)
+        u,v=lproc.wind_velocity()
+        ws,wd=lproc.wind_speed_direction(u,v)
+        
+        #output
+        if not os.path.isfile(os.path.join(save_path,filename)) or replace==True:
+            output=xr.Dataset()
+            output['u']=xr.DataArray(u,coords={'time':lproc.time},attrs={'units':'m/s','long_name':'high-frequency zonal (W-E) wind velocity'})
+            output['v']=xr.DataArray(v,coords={'time':lproc.time},attrs={'units':'m/s','long_name':'high-frequency meridional (S-N) wind velocity'})
+            output['ws']=xr.DataArray(ws,coords={'time':lproc.time},attrs={'units':'m/s','long_name':'high-frequency horizontal wind speed'})
+            output['wd']=xr.DataArray(wd,coords={'time':lproc.time},attrs={'units':'degrees','long_name':'high-frequency wind direction'}) 
+            output.attrs={'comment':f'Created by Zoe Uribe and Stefano Letizia on {datetime.strftime(datetime.now(),"%Y-%m-%d %H:%M:%S")}',
+                          'description':'Dual-Doppler velocity reconstruction from stare files. Vertical velocity is neglected.',
+                          'contact':'stefano.letizia@nrel.gov'}
             
-        l2=xr.open_dataset(file2)
-        l2=l2.assign_coords(scanID=l2.time)
-        l2=l2.drop_vars(["time", "beamID"]).squeeze(drop=True).rename({"scanID": "time"})
-        
-        if 'wind_speed' in lidar2.data_vars:
-            lidar2=xr.concat([lidar2,l2],dim='time')
-        else:
-            lidar2=l2
+            output.to_netcdf(os.path.join(save_path,filename))
+            
+            #plots
+            lproc.plot_radial_velocities()
+            plt.savefig(os.path.join(save_path,filename).replace(".nc",".rad.vel.png"))
+            
+            lproc.plot_velocities(u,v)
+            plt.savefig(os.path.join(save_path,filename).replace(".nc",".vel.png"))
+            
+            lproc.plot_correlation()
+            plt.savefig(os.path.join(save_path,filename).replace(".nc",".corr.png"))
 
-    lproc = ddp.Dual_Doppler_Processing(lidar1,lidar2,range1, range2, config)
-    u,v=lproc.wind_velocity()
-    ws,wd=lproc.wind_speed_direction(u,v)
-    
-    #output
-    datestr= f'{str(lproc.time[0])[:10].replace("-","")}.000000'
-    filename=f'{os.path.basename(save_path)}.{datestr}.nc'
-    if not os.path.isfile(os.path.join(save_path,filename)) or replace==True:
-        output=xr.Dataset()
-        output['u']=xr.DataArray(u,coords={'time':lproc.time},attrs={'units':'m/s','long_name':'high-frequency zonal (W-E) wind velocity'})
-        output['v']=xr.DataArray(v,coords={'time':lproc.time},attrs={'units':'m/s','long_name':'high-frequency meridional (S-N) wind velocity'})
-        output['ws']=xr.DataArray(ws,coords={'time':lproc.time},attrs={'units':'m/s','long_name':'high-frequency horizontal wind speed'})
-        output['wd']=xr.DataArray(wd,coords={'time':lproc.time},attrs={'units':'degrees','long_name':'high-frequency wind direction'}) 
-        output.attrs={'comment':f'Created by Zoe Uribe and Stefano Letizia on {datetime.strftime(datetime.now(),"%Y-%m-%d %H:%M:%S")}',
-                      'description':'Dual-Doppler velocity reconstruction from stare files. Vertical velocity is neglected.',
-                      'contact':'stefano.letizia@nrel.gov'}
-        
-        output.to_netcdf(os.path.join(save_path,filename))
-        
-        #plots
-        lproc.plot_velocities(u,v)
-        plt.savefig(os.path.join(save_path,filename).replace(".nc",".vel.png"))
-        
-        lproc.plot_correlation()
-        plt.savefig(os.path.join(save_path,filename).replace(".nc",".corr.png"))
-
-        # if delete:
-        #     os.remove(file)
-        # except:
-        #     with open(logfile_main, 'a') as lf:
-        #         lf.write(f"{datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M:%S')} - ERROR - Error standardizing file {os.path.basename(file)}: \n")
-        #         traceback.print_exc(file=lf)
-        #         lf.write('\n --------------------------------- \n')
+    except:
+        with open(logfile_main, 'a') as lf:
+            lf.write(f"{datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M:%S')} - ERROR - Error creating dual Doppler file {filename}: \n")
+            traceback.print_exc(file=lf)
+            lf.write('\n --------------------------------- \n')
 
 def dates_from_files(files):
     '''
@@ -181,11 +216,10 @@ channel_save=f's{sites[0].lower()}.s{sites[1].lower()}.lidar.vt.c0'
 save_path=os.path.join(config['path_data'],config['chennels_ddp'][c].split('/')[0],channel_save)
 if mode=='serial':
     for date in dates_sel:
-        files1=np.array(files[sites[0]])[np.array(dates[sites[0]])==date]
-        files2=np.array(files[sites[1]])[np.array(dates[sites[1]])==date]
-        if len(files1)>0 and len(files2)>0:
-            dual_doppler_rec(files1,files2,config['range'][sites[0]],config['range'][sites[1]],config['time_step'],
-                             save_path,logfile_main,replace)
-          
-
-        
+        dual_doppler_rec(files,sites,date,config,save_path,logfile_main,replace)
+elif mode=='parallel':
+    args = [(files,sites,dates_sel[i],config,save_path,logfile_main,replace) for i in range(len(dates_sel))]
+    with Pool() as pool:
+        pool.starmap(dual_doppler_rec, args)
+else:
+    raise BaseException(f"{mode} is not a valid processing mode (must be serial or parallel)")        
