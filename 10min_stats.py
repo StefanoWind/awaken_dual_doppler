@@ -17,12 +17,14 @@ from scipy.stats import binned_statistic
 if len(sys.argv)==1:
     sdate='2023-08-03'#start date
     edate='2023-08-04'#end date
+    path_config='configs/config_scada.yaml' #config path
+    turbine='G2' #selected turbine
 else:
     sdate=sys.argv[1]
     edate=sys.argv[2]
+    path_config=sys.argv[3]
+    turbine=sys.argv[4]
 
-path_config='configs/config.yaml' #config path
-turbine='G2' #selected turbie
 source_lidar='awaken/sa5.sa1.lidar.vt.c0/*nc' #source of lidar data
 source_scada='awaken/kp.turbine.z02.00/*csv' #source of scada data
 dtime=600#[s] bin size in time
