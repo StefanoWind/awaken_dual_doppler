@@ -17,7 +17,7 @@ from scipy.stats import binned_statistic
 if len(sys.argv)==1:
     sdate='2023-08-03'#start date
     edate='2023-08-04'#end date
-    path_config='configs/config_scada.yaml' #config path
+    path_config='configs/config.yaml' #config path
     turbine='G2' #selected turbine
 else:
     sdate=sys.argv[1]
@@ -35,13 +35,13 @@ with open(path_config, 'r') as fid:
     config = yaml.safe_load(fid)
 
 #read lidar data
-files_lidar=glob.glob(os.path.join(config['path_data'],source_lidar))
+files_lidar=sorted(glob.glob(os.path.join(config['path_data'],source_lidar)))
 print(f'Reading {len(files_lidar)} lidar files',flush=True)
 lidar=xr.open_mfdataset(files_lidar)
 tnum_lid=(lidar.time.values-np.datetime64('1970-01-01T00:00:00'))/ np.timedelta64(1, "s")
 
 #read scada data
-files_scada=glob.glob(os.path.join(config['path_data'],source_scada))
+files_scada=sorted(glob.glob(os.path.join(config['path_data'],source_scada)))
 time = np.array([],dtype='datetime64')
 power = []
 ws = []
