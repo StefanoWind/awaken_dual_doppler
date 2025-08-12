@@ -32,8 +32,8 @@ warnings.filterwarnings('ignore')
 
 #users inputs
 if len(sys.argv)==1:
-    sdate='2023-07-31' #start date
-    edate='2023-08-01' #end date
+    sdate='2023-10-24' #start date
+    edate='2023-10-25' #end date
     replace=False#replace existing files?
     delete=False #delete input files?
     path_config=os.path.join(cd,'configs/config.yaml') #config path
@@ -96,8 +96,8 @@ def dual_doppler_rec(files,sites,date,config,save_path,logfile_main,replace):
         logger.addHandler(file_handler)
         
         #find files
-        files1=np.array(files[sites[0]])[np.array(dates[sites[0]])==date]
-        files2=np.array(files[sites[1]])[np.array(dates[sites[1]])==date]
+        files1=sorted(np.array(files[sites[0]])[np.array(dates[sites[0]])==date])
+        files2=sorted(np.array(files[sites[1]])[np.array(dates[sites[1]])==date])
         if len(files1)==0 or len(files2)==0:
             raise BaseException(f'No files on {date}')
         logger.info(f"Building {filename} from {len(files1)} files from lidar 1 and {len(files2)} files from lidar 2")
@@ -107,13 +107,14 @@ def dual_doppler_rec(files,sites,date,config,save_path,logfile_main,replace):
         for file1 in files1:
             try:
                 l1=xr.open_dataset(file1)
-                l1=l1.assign_coords(scanID=l1.time)
-                l1=l1.drop_vars(["time", "beamID"]).squeeze(drop=True).rename({"scanID": "time"})
-                
-                if 'wind_speed' in lidar1.data_vars:
-                    lidar1=xr.concat([lidar1,l1],dim='time')
-                else:
-                    lidar1=l1
+                if len(l1.beamID)==1:
+                    l1=l1.assign_coords(scanID=l1.time)
+                    l1=l1.drop_vars(["time", "beamID"]).squeeze(drop=True).rename({"scanID": "time"})
+                    
+                    if 'wind_speed' in lidar1.data_vars:
+                        lidar1=xr.concat([lidar1,l1],dim='time')
+                    else:
+                        lidar1=l1
             except:
                 with open(logfile_main, 'a') as lf:
                     lf.write(f"{datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M:%S')} - ERROR - Error reading file {file1}: \n")
@@ -124,13 +125,14 @@ def dual_doppler_rec(files,sites,date,config,save_path,logfile_main,replace):
         for file2 in files2:
             try:
                 l2=xr.open_dataset(file2)
-                l2=l2.assign_coords(scanID=l2.time)
-                l2=l2.drop_vars(["time", "beamID"]).squeeze(drop=True).rename({"scanID": "time"})
-                
-                if 'wind_speed' in lidar2.data_vars:
-                    lidar2=xr.concat([lidar2,l2],dim='time')
-                else:
-                    lidar2=l2
+                if len(l2.beamID)==1:
+                    l2=l2.assign_coords(scanID=l2.time)
+                    l2=l2.drop_vars(["time", "beamID"]).squeeze(drop=True).rename({"scanID": "time"})
+                    
+                    if 'wind_speed' in lidar2.data_vars:
+                        lidar2=xr.concat([lidar2,l2],dim='time')
+                    else:
+                        lidar2=l2
             except:
                 with open(logfile_main, 'a') as lf:
                     lf.write(f"{datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M:%S')} - ERROR - Error reading file {file2}: \n")
@@ -183,22 +185,22 @@ def dates_from_files(files):
 
 #%% Main
 
-#standardize all files within date range
-for c in config['channels']:
-    channel=config['channels'][c]
-    files=glob.glob(os.path.join(config['path_data'],channel,config['wildcard_stand'][c]))
-    if mode=='serial':
-        for f in files:
-              standardize_file(f,None,config,logfile_main,sdate,edate,replace,delete)
-    elif mode=='parallel':
-        args = [(files[i],None, config,logfile_main,sdate,edate,replace,delete) for i in range(len(files))]
-        with Pool() as pool:
-            pool.starmap(standardize_file, args)
-    else:
-        raise BaseException(f"{mode} is not a valid processing mode (must be serial or parallel)")
+# #standardize all files within date range
+# for c in config['channels']:
+#     channel=config['channels'][c]
+#     files=glob.glob(os.path.join(config['path_data'],channel,config['wildcard_stand'][c]))
+#     if mode=='serial':
+#         for f in files:
+#               standardize_file(f,None,config,logfile_main,sdate,edate,replace,delete)
+#     elif mode=='parallel':
+#         args = [(files[i],None, config,logfile_main,sdate,edate,replace,delete) for i in range(len(files))]
+#         with Pool() as pool:
+#             pool.starmap(standardize_file, args)
+#     else:
+#         raise BaseException(f"{mode} is not a valid processing mode (must be serial or parallel)")
 
-for handler in logging.root.handlers[:]:
-    logging.root.removeHandler(handler)
+# for handler in logging.root.handlers[:]:
+#     logging.root.removeHandler(handler)
 
 #dual-Doppler reconstruction
 files={}

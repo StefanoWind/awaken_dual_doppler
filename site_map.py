@@ -126,7 +126,7 @@ ax = fig.add_subplot(111, projection='3d')
 sel_x=np.abs(X_topo[0,:]-x_target)<rmax
 sel_y=np.abs(Y_topo[:,0]-y_target)<rmax
 surf = ax.plot_surface(X_topo[sel_y,:][:,sel_x]-x_target, Y_topo[sel_y,:][:,sel_x]-y_target, Z_topo[sel_y,:][:,sel_x]-z_target, cmap='copper',linewidth=0, antialiased=False,alpha=0.5)
-plt.plot(x_A1-x_target,y_A1-y_target,z_A5-z_target,'xg',markersize=10,zorder=10)
+plt.plot(x_A1-x_target,y_A1-y_target,z_A5-z_target,'xr',markersize=10,zorder=10)
 plt.plot(x_A5-x_target,y_A5-y_target,z_A5-z_target,'xb',markersize=10,zorder=10)
 
 
@@ -137,12 +137,12 @@ for x,y,z in zip(x_T-x_target,y_T-y_target,z_T-z_target):
     plt.plot([x,x-D/2*np.cos(np.radians(30))],[y,y],[z+H,z+H-D/2*np.sin(np.radians(30))],color='k', zorder=10)
     plt.plot([x,x],[y,y],[z+H,z+H+D/2],color='k', zorder=10)
 
-plt.plot(x_beam_A1-x_target,y_beam_A1-y_target,z_beam_A1-z_target,'.g',markersize=3,
+plt.plot(x_beam_A1-x_target,y_beam_A1-y_target,z_beam_A1-z_target,'.r',markersize=3,alpha=0.5,
          label=r"$\rho="+str(int(rho_A1))+r"$ m, $\theta="+str(np.round(azi_A1,2))+r"^\circ$ , $\beta="+str(np.round(ele_A1,2))+r"^\circ$",zorder=10)
-plt.plot(x_beam_A5-x_target,y_beam_A5-y_target,z_beam_A5-z_target,'.b',markersize=3,
+plt.plot(x_beam_A5-x_target,y_beam_A5-y_target,z_beam_A5-z_target,'.b',markersize=3,alpha=0.5,
          label=r"$\rho="+str(int(rho_A5))+r"$ m, $\theta="+str(np.round(azi_A5,2))+r"^\circ$ , $\beta="+str(np.round(ele_A5,2))+r"^\circ$",zorder=10)
 
-plt.plot(0,0,0,'.r',markersize=10,label='Target',zorder=10)
+plt.plot(0,0,0,'.g',markersize=10,label='Target',zorder=10)
 
 plt.xlim([-rmax,rmax])
 plt.ylim([-rmax,rmax])
