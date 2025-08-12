@@ -185,22 +185,22 @@ def dates_from_files(files):
 
 #%% Main
 
-# #standardize all files within date range
-# for c in config['channels']:
-#     channel=config['channels'][c]
-#     files=glob.glob(os.path.join(config['path_data'],channel,config['wildcard_stand'][c]))
-#     if mode=='serial':
-#         for f in files:
-#               standardize_file(f,None,config,logfile_main,sdate,edate,replace,delete)
-#     elif mode=='parallel':
-#         args = [(files[i],None, config,logfile_main,sdate,edate,replace,delete) for i in range(len(files))]
-#         with Pool() as pool:
-#             pool.starmap(standardize_file, args)
-#     else:
-#         raise BaseException(f"{mode} is not a valid processing mode (must be serial or parallel)")
+#standardize all files within date range
+for c in config['channels']:
+    channel=config['channels'][c]
+    files=glob.glob(os.path.join(config['path_data'],channel,config['wildcard_stand'][c]))
+    if mode=='serial':
+        for f in files:
+              standardize_file(f,None,config,logfile_main,sdate,edate,replace,delete)
+    elif mode=='parallel':
+        args = [(files[i],None, config,logfile_main,sdate,edate,replace,delete) for i in range(len(files))]
+        with Pool() as pool:
+            pool.starmap(standardize_file, args)
+    else:
+        raise BaseException(f"{mode} is not a valid processing mode (must be serial or parallel)")
 
-# for handler in logging.root.handlers[:]:
-#     logging.root.removeHandler(handler)
+for handler in logging.root.handlers[:]:
+    logging.root.removeHandler(handler)
 
 #dual-Doppler reconstruction
 files={}
