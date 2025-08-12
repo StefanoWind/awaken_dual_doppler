@@ -214,7 +214,7 @@ for c in config['chennels_ddp']:
     
 dates_sel = [datetime.strftime((datetime.strptime(sdate,'%Y-%m-%d') + timedelta(days=i)),'%Y%m%d') for i in range((datetime.strptime(edate,'%Y-%m-%d')  - datetime.strptime(sdate,'%Y-%m-%d')).days)]
 
-channel_save=f'{config["vt_site"]}.vtower.c0'
+channel_save=f'{config["vt_site"]}.vtower.z01.c0'
 save_path=os.path.join(config['path_data'],config['chennels_ddp'][c].split('/')[0],channel_save)
 if mode=='serial':
     for date in dates_sel:
