@@ -7,14 +7,9 @@ __pycache__
 *.yaml
 *.mp4
 *.xslx
-<<<<<<< HEAD
-trash/*
-*.egg-info/
-*.hpl
-=======
 trash/
 *.hpl
 *.html
 *.log
 build/
->>>>>>> main
+*.txt
