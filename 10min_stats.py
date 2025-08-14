@@ -25,7 +25,7 @@ else:
     path_config=sys.argv[3]
     turbine=sys.argv[4]
 
-source_lidar='awaken/sa5.sa1.lidar.vt.c0/*nc' #source of lidar data
+source_lidar='awaken/se.vtower.z01.c0/*nc' #source of lidar data
 source_scada='awaken/kp.turbine.z02.00/*csv' #source of scada data
 dtime=600#[s] bin size in time
 
